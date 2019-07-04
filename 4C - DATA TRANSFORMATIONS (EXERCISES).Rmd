@@ -1,0 +1,172 @@
+---
+title: 'Data Preparation: Transformations - Exercises'
+author: "Eric Cai"
+date: "7/4/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 4(C) DATA TRANSFORMATIONS: EXERCISES
+
+### Question 1  
+Loading all of the necessary packages:
+```{r, message = FALSE}
+library(datasets)
+library(tidyverse)
+library(gridExtra)
+library(grid)
+library(png)
+library(downloader)
+library(grDevices)
+library(caret)
+```
+
+Creating two dataframes: *unscaled.weights* and *scaled.weights*. As you can probably guess, the former will contain the original weight data and the latter will contain the standardized weight data.
+
+```{r, message = FALSE}
+unscaled.weights <- data.frame(ChickWeight$weight)
+scaled.weights <- data.frame(scale(ChickWeight$weight))
+
+# renaming the column containing weights as "weight"
+names(unscaled.weights)[1] <- "weight"
+names(scaled.weights)[1] <- "weight"
+```
+
+Then we plot both data sets on histograms side by side to compare their distribution:
+
+```{r, echo = FALSE}
+unscaled <- ggplot(unscaled.weights) + 
+  geom_histogram(bins = 40) + 
+  aes(x = weight) + 
+  labs(title = "Unscaled")
+
+
+scaled <- ggplot(scaled.weights) + 
+  geom_histogram(bins = 40) + 
+  aes(x = weight) +
+  labs(title = "Scaled")
+
+grid.arrange(unscaled, scaled, ncol = 2)
+```
+
+We can see pretty clearly that standardizing the data does not affect the shape of the distribution. Scaling the data only changed its range.  
+  
+Now let's look at the quantile-quantile plots for these distributions:
+
+```{r}
+# plotting for unscaled weights
+qqnorm(unscaled.weights$weight, main = "Normal Q-Q Plot for Unscaled Weights")
+qqline(ChickWeight$weight)
+
+
+#plotting for scaled weights
+qqnorm(scaled.weights$weight, main = "Normal Q-Q Plot for Scaled Weights")
+qqline(scaled.weights$weight)
+```
+
+Once again, the shape of the plots are exactly the same. This makes sense: Q-Q plots compare distributions (in this case the two weight distributions to a normal distribution). Since the scaled weights maintain the same shape distribution as the original weights, we should expect no difference in the shape of the Q-Q plots.  
+As for the results themselves, we can see quite clearly that the distribution of the weights is positively skewed.  
+  
+Now let's apply some transformations:
+
+```{r}
+# Note: the transformations should only be done to the unscaled data. The scaled data has many negative values, which will become NaN's if transformed. Since NaN's cannot be plotted, they will be ignored, which can significantly alter the distribution (intuitively, most of these NaN's will be pulled from the left tail of the distribution, since that is where we expect most of the negative numbers to be).
+
+# log transformation
+unscaled_log <- transform(unscaled.weights, weight.log = log(weight))
+
+# sqrt transformation
+unscaled_sqrt <- transform(unscaled.weights, weight.sqrt = sqrt(weight))
+```
+
+Let's look at the Q-Q plots for these transformations:
+
+```{r, echo = FALSE}
+qqnorm(unscaled_log$weight.log, main = "Normal Q-Q Plot for Unscaled Weights With Log Transform")
+qqline(unscaled_log$weight.log)
+
+qqnorm(unscaled_sqrt$weight.sqrt, main = "Normal Q-Q Plot for Unscaled Weights With Sqrt Transform")
+qqline(unscaled_sqrt$weight.sqrt)
+```
+
+Both of these transformations seem to fix the skewness a bit, with the sqrt transform clearly working much better. In both cases, the tails move opposite sides of the reference line, which was not the case in the original distribution, and the peak itself stays much close to the reference line.  
+  
+How about the Box-Cox transformation?
+
+```{r}
+unscaled_boxcox <- BoxCoxTrans(unscaled.weights$weight, fudge = 0.05)
+unscaled_boxcox
+```
+
+```{r, message = FALSE}
+unscaled_boxcox <- data.frame(predict(unscaled_boxcox, unscaled.weights$weight))
+# renaming the column containing the weights to "weight"
+names(unscaled_boxcox)[1] <- "weight"
+```
+
+```{r, echo = FALSE}
+qqnorm(unscaled_boxcox$weight, main = "Normal Q-Q Plot for Scaled Weights With Box-Cox Transformation")
+qqline(unscaled_boxcox$weight)
+```
+
+Interestingly enough, the *BoxCoxTrans* function used a lambda of 0. This corresponds directly to a log transformation, and the resulting Q-Q plot seems to reflect this as it is identical to the Q-Q plot of the log transformation.
+
+### QUESTION 2
+
+First, let's generate our samples.
+
+```{r}
+# Sampling from normal distribution
+sample.norm <- rnorm(1000, 0, 0.25)
+
+# Sampling from exponential distribution
+sample.exp <- rexp(1000, 10)
+```
+
+Now, for the plots:
+
+```{r, echo = FALSE}
+qqnorm(sample.norm, main = "Normal Q-Q Plot for Normal Distribution (mean = 0, var = 0.25)")
+qqline(sample.norm)
+
+qqnorm(sample.exp, main = "Normal Q-Q Plot for Exponential Distribution (lambda = 10)")
+qqline(sample.exp)
+
+sample.exp.log <- log(sample.exp)
+
+qqnorm(sample.exp.log, main = "Normal Q-Q Plot for Exponential Distribution With log Transformation")
+qqline(sample.exp.log)
+```
+
+We can also look directly at the distributions for these data sets: 
+
+```{r, echo = FALSE}
+
+samples <- data.frame(norm = sample.norm, exp = sample.exp, exp.log = sample.exp.log)
+names(samples)[1] <- "norm"
+names(samples)[2] <- "exp"
+names(samples)[3] <- "exp.log"
+
+plot.norm <- ggplot(samples) + 
+  aes(x = norm) + 
+  geom_histogram(bins = 40) + 
+  labs(title = "Normal", x = "Sample Value")
+
+plot.exp <- ggplot(samples) + 
+  aes(x = exp) + 
+  geom_histogram(bins = 40) + 
+  labs(title = "Exponential", x = "Sample Value")
+
+plot.exp.log <- ggplot(samples) + 
+  aes(x = exp.log) + 
+  geom_histogram(bins = 40) + 
+  labs(title = "Exp. with Trans.", x = "Sample Value")
+
+grid.arrange(plot.norm, plot.exp, plot.exp.log, ncol = 3)
+```
+
+Ultimately, we can see from the histograms and the Q-Q plots that negatively skewed distributions will stay under their respective theoretical lines - the opposite holds for positively skewed distributions. We can also see from the histograms that the log transform (and presumably the sqrt transform as well) pushes the skew of the distribution in the negative direction. It follows then that an exponential transform or a power transform (with a power greater than 1) will push the skew of a distribution in the positive direction. It seems, then, that if we want to fit a given distribution to a normal shape, we can apply a log or a sqrt transform if the original data is positivevly skewed, and an exponential or power transform if the original data is negatively skewed.
+
